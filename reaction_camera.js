@@ -131,7 +131,7 @@ async function handleReaction(key, value, globalConfig, obsManager){
         let id = globalConfig.camera.livePreview.id;
         let previewOption = globalConfig.camera.livePreview.preview;
 
-        if(!id || previewOption === "off" || previewOption == null) return; // just don't react TODO:
+        if(!id || previewOption !== "obs") return; // just don't react TODO:
 
         let camera = globalConfig.camera.configured.find(cam => cam.id === id);
         if(!camera) return; // camera not found
@@ -146,13 +146,13 @@ async function handleReaction(key, value, globalConfig, obsManager){
 
         if(camera.type == "web"){
             let targetSceneId = sceneMapping[`RI3D_WEB_1`];
-            if(!targetSceneId) return; // no target scene id for single media
+            if(targetSceneId == null) return; // no target scene id for single media
 
             let requests = setOBSwebSource(obsManager, camera, 'RI3D_WEB_1', targetSceneId, currentScene);
             await obsManager.sendBatchRequests(requests);
         }else{
             let targetSceneId = sceneMapping[`RI3D_MEDIA_1`];
-            if(!targetSceneId) return; // no target scene id for single media
+            if(targetSceneId == null) return; // no target scene id for single media
 
             let requests = setOBSmediaSource(obsManager, camera, 'RI3D_MEDIA_1', targetSceneId, currentScene, camera.type == "file");
             await obsManager.sendBatchRequests(requests);
@@ -185,116 +185,31 @@ async function handleReaction(key, value, globalConfig, obsManager){
         }else{
             if(camera.type == "web"){
                 let targetSceneId = sceneMapping[`RI3D_WEB_1`];
-                if(!targetSceneId) return; // no target scene id for single media
+                if(targetSceneId == null) return; // no target scene id for single media
 
                 let requests = setOBSwebSource(obsManager, camera, 'RI3D_WEB_1', targetSceneId, currentScene);
                 await obsManager.sendBatchRequests(requests);
             }else{
                 let targetSceneId = sceneMapping[`RI3D_MEDIA_1`];
-                if(!targetSceneId) return; // no target scene id for single media
+                if(targetSceneId == null) return; // no target scene id for single media
 
                 let requests = setOBSmediaSource(obsManager, camera, 'RI3D_MEDIA_1', targetSceneId, currentScene, camera.type == "file");
                 await obsManager.sendBatchRequests(requests);
             }
         }
     }else if(key === "sceneRequest"){
-        // couple of things we need to do
-        // 1. verify that this IS a request
-        // 2. get the current scene and determine if it's a camera OR scene transition
-        // 3. map the requested camera(s) to the correct sources in OBS based on the requested
-
-        // this really just depends per scene... might just have a cameras[] inside of the sceneRequest
-        let request = globalConfig.camera.sceneRequest;;
-        if(!request || !request.scene || !request.cameras) return; // invalid request
-
-        let targetScene = request.scene;
-        let cameras = request.cameras; // array of camera IDs
-
-        let currentScene = globalConfig.obs_state.currentScene;
-        if(!currentScene) return; // no current scene
-
-        // first determine if we need a scene transition
-        let allRequests = [];
-        if(currentScene !== targetScene){
-            // then we need to do a scene transition first
-            allRequests.push({
-                "requestType": "SetCurrentProgramScene",
-                "requestData": {
-                    "sceneName": targetScene
-                }
+        const request=globalConfig.camera.sceneRequest;
+        try {
+            const commands=require('./camera-plan').planScene(request,globalConfig);
+            obsManager.sendBatchRequests(commands,response=>{
+                const failed=response?.error || (Array.isArray(response) && response.some(r=>!r.requestStatus?.result));
+                if(failed){obsManager.socketServer.emit('camera-error',response.error || 'OBS rejected a camera assignment; check source names and types.');return;}
+                globalConfig.camera.activeSceneRequest=request;
+                globalConfig.camera.sceneRequest={};
+                obsManager.socketServer.emit('dataUpdated','camera','activeSceneRequest',request);
             });
-        }else{
-            // no scene transition needed
-            triggerPlayTransition(globalConfig, obsManager);
-        }
-        allRequests.push({
-            "requestType": "Sleep",
-            "requestData": {
-                "sleepMillis": 1000
-            }
-        });
-
-        let sourceCameraNames = Array.from(globalConfig.obs_state.sourceCameraNames[targetScene] || []); // copy
-        if(!sourceCameraNames) return; // no source camera names for target scene
-
-        // only handle the first TWO cameras
-        for(let i = 0; i < Math.min(cameras.length, 2); i++){
-            let cameraId = cameras[i];
-            let camera = globalConfig.camera.configured.find(cam => cam.id === cameraId);
-            if(!camera) continue; // camera not found
-            if(!isValidCamera(camera)) continue; // invalid camera
-
-            // then determine if RI3D_MEDIA_# or RI3D_WEB_#
-            let sourceNamePrefix = camera.type == "web" ? "RI3D_WEB_" : "RI3D_MEDIA_";
-            let sourceName = sourceNamePrefix + (i + 1).toString();
-
-            if(!sourceCameraNames.includes(sourceName)) continue; // source name not in the list for the target scene
-            // then remove it from the sourceCameraNames list
-            sourceCameraNames.splice(sourceCameraNames.indexOf(sourceName), 1);
-
-            let sceneMapping = globalConfig.scene_index_mapping[targetScene];
-            if(!sceneMapping) continue; // no mapping for target scene
-
-            let targetSceneId = sceneMapping[sourceName];
-            if(!targetSceneId) continue; // no target scene id for this source name
-
-            if(camera.type == "web"){
-                let requests = setOBSwebSource(obsManager, camera, sourceName, targetSceneId, targetScene);
-                allRequests = allRequests.concat(requests);
-            }else{
-                let isLocal = camera.type == "file";
-                let requests = setOBSmediaSource(obsManager, camera, sourceName, targetSceneId, targetScene, isLocal);
-                allRequests = allRequests.concat(requests);
-            }
-        }
-        
-        // now disable all of the other sources
-        for(const sourceName of sourceCameraNames){
-            let sceneMapping = globalConfig.scene_index_mapping[targetScene];
-            if(!sceneMapping) continue; // no mapping for target scene
-
-            let targetSceneId = sceneMapping[sourceName];
-            if(!targetSceneId) continue; // no target scene id for this source name
-
-            let disableRequest = {
-                "requestType": "SetSceneItemEnabled",
-                "requestData": {
-                    "sceneName": targetScene,
-                    "sceneItemId": targetSceneId,
-                    "sceneItemEnabled": false
-                }
-            };
-
-            allRequests.push(disableRequest);
-        }
-
-        await obsManager.sendBatchRequests(allRequests);
-        globalConfig.camera.activeSceneRequest = request;
-        obsManager.socketServer.emit("dataUpdated", "camera", "activeSceneRequest", globalConfig.camera.activeSceneRequest);
-        globalConfig.camera.sceneRequest = {}
+        } catch(error){obsManager.socketServer.emit('camera-error',error.message);}
+;
     }
 }
-
-module.exports = {
-    handleReaction
-};
+module.exports={handleReaction};

@@ -1,0 +1,5 @@
+const {test}=require('node:test');const a=require('node:assert/strict');const {planScene}=require('../camera-plan');
+function config(){return {camera:{configured:[{id:'a',type:'media',url:'http://example.test/a',x:0,y:0,width:1,height:1}]},scene_index_mapping:{Present:{RI3D_MEDIA_1:0,RI3D_WEB_1:3}}};}
+test('accepts item zero and enables media while hiding browser before transition',()=>{const p=planScene({scene:'Present',cameras:['a']},config());a.equal(p.at(-1).requestType,'SetCurrentProgramScene');a.equal(p.find(r=>r.requestType==='SetSceneItemEnabled'&&r.requestData.sceneItemId===0).requestData.sceneItemEnabled,true);a.equal(p.find(r=>r.requestType==='SetSceneItemEnabled'&&r.requestData.sceneItemId===3).requestData.sceneItemEnabled,false);});
+test('rejects missing source before commands',()=>{const c=config();delete c.scene_index_mapping.Present.RI3D_MEDIA_1;a.throws(()=>planScene({scene:'Present',cameras:['a']},c),/needs/);});
+test('rejects unknown camera',()=>a.throws(()=>planScene({scene:'Present',cameras:['bad']},config()),/invalid/));

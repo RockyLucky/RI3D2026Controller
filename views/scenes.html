@@ -140,7 +140,7 @@
                 
             </div>
         </div>
-    </body>
+    <p id="camera-error" role="alert" style="position:fixed;bottom:12px;left:12px;background:white;color:#b00020;padding:12px;z-index:20" hidden></p></body>
     <script>
 
         const socket = io(window.location.host, {
@@ -777,18 +777,20 @@
 
         }
 
+        socket.on('camera-error',message=>{const box=document.getElementById('camera-error');box.textContent=message;box.hidden=false;});
         function submitSceneRequest(){
-            let requestedScene = selectedOptions["curScene"]["selected"];
+            document.getElementById('camera-error').hidden=true;
+            let requestedScene = selectedOptions["curScene"]["selected"] || selectedOptions["curScene"]["before"];
             let mappedScene = sceneNameMapping[requestedScene] || null;
             if(mappedScene == null) {
-                selectedOptions["curScene"]["selected"] = selectedOptions["curScene"]["before"];
+                return; // Never submit an unmapped scene.
             };
 
             // we also need the camera id's from the scene options
             let sceneOptionsContainer = document.getElementsByName("scene-options-queued")[0];
 
             // if the selected scene is the same as the before scene, then get from active
-            if(selectedOptions["curScene"]["before"] === selectedOptions["curScene"]["selected"]){
+            if(selectedOptions["curScene"]["before"] === requestedScene){
                 sceneOptionsContainer = document.getElementsByName("scene-options-active")[0];
             }
 

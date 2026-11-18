@@ -1,4 +1,22 @@
-<!doctype html><html><head><title>Audio mixer</title><script src="/ri3d26/socket.io/socket.io.js"></script></head><body><a href="home">Home</a><h1>Audio mixer</h1><p id="status">Waiting for OBS</p><main></main><script>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Audio Mixer | RI3D</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200">
+<link rel="stylesheet" href="main.css"><link rel="stylesheet" href="mixer.css"><script src="/ri3d26/socket.io/socket.io.js"></script></head>
+<body class="designed-background">
+<nav class="quick-options" aria-label="Controller navigation">
+<button class="material-symbols-outlined" aria-label="Home" onclick="location.href='home'">home</button>
+<button class="material-symbols-outlined" aria-label="Camera manager" onclick="location.href='scenes'">camera_video</button>
+<button class="material-symbols-outlined" aria-label="Overlay manager" onclick="location.href='manager'">wall_art</button>
+<button class="material-symbols-outlined selected" aria-label="Audio mixer" onclick="location.href='mixer'">graphic_eq</button>
+<button class="material-symbols-outlined" aria-label="Documents" onclick="location.href='documents'">files</button>
+<button class="material-symbols-outlined" aria-label="Schedule" onclick="location.href='schedule'">avg_time</button>
+<button class="material-symbols-outlined" aria-label="Livestream" onclick="location.href='livestream'">preview</button>
+</nav>
+<div class="center-module mixer-layout"><section class="container across-screen">
+<div class="flex-apart"><div><h2>Audio Mixer</h2><span>Manages OBS Audio LIVE</span></div><div class="status-indicator" id="connection-light" aria-hidden="true"></div></div>
+<hr><p id="status" role="status">Waiting for OBS</p>
+<p id="empty">Connect OBS to view available audio inputs.</p><main aria-label="Audio inputs"></main>
+</section></div><script>
 const socket=io({path:'/ri3d26/socket.io'}), rows=new Map();
 function render(state){
  document.querySelector('#status').textContent='OBS audio inputs';
@@ -7,17 +25,20 @@ function render(state){
   if(typeof input.inputMuted!=='boolean')continue;
   names.add(name);
   if(!rows.has(name)){
-   const row=document.createElement('p'), label=document.createElement('span'), gain=document.createElement('input'), mute=document.createElement('button'), meter=document.createElement('meter');
-   label.textContent=name+' ';gain.type='range';gain.min=-100;gain.max=26;gain.step=0.5;gain.setAttribute('aria-label',name+' gain dB');meter.min=-60;meter.max=0;meter.value=-60;
+   const row=document.createElement('div'), label=document.createElement('span'), gain=document.createElement('input'), mute=document.createElement('button'), meter=document.createElement('meter');
+   row.className='border-container mixer-channel';mute.className='bg-secondary';label.className='mixer-name';meter.setAttribute('aria-label',name+' peak level');label.textContent=name+' ';gain.type='range';gain.min=-100;gain.max=26;gain.step=0.5;gain.setAttribute('aria-label',name+' gain dB');meter.min=-60;meter.max=0;meter.value=-60;
    gain.onchange=()=>socket.emit('mixer-command',name,null,Number(gain.value));mute.onclick=()=>socket.emit('mixer-command',name,mute.dataset.muted!=='true');
    row.append(label,gain,mute,meter);document.querySelector('main').append(row);rows.set(name,{row,gain,mute,meter});
   }
-  const r=rows.get(name);if(document.activeElement!==r.gain)r.gain.value=input.inputVolumeDb ?? -100;r.mute.dataset.muted=String(input.inputMuted);r.mute.textContent=input.inputMuted?'Unmute':'Mute';
+  const r=rows.get(name);if(document.activeElement!==r.gain)r.gain.value=input.inputVolumeDb ?? -100;r.mute.dataset.muted=String(input.inputMuted);r.mute.textContent=input.inputMuted?'Unmute':'Mute';r.mute.className=input.inputMuted?'bg-primary':'bg-secondary';r.mute.setAttribute('aria-pressed',String(input.inputMuted));r.gain.title=Number(r.gain.value).toFixed(1)+' dB';
  }
  for(const [name,r] of rows)if(!names.has(name)){r.row.remove();rows.delete(name);}
+ document.querySelector('#empty').hidden=names.size>0;document.querySelector('#empty').textContent='No audio inputs available in OBS.';
 }
 socket.on('entireConfig',c=>{if(c.obs_state.snapshot)render(c.obs_state.snapshot)});
 socket.on('dataUpdated',(g,k,v)=>{if(g==='obs_state'&&k==='snapshot')render(v);if(g==='obs_state'&&k==='connected'&&!v)document.querySelector('#status').textContent='OBS disconnected';});
 socket.on('obs-meters',data=>{for(const r of rows.values())r.meter.value=-60;for(const i of data.inputs||[]){const r=rows.get(i.inputName);if(r){const peak=Math.max(0,...i.inputLevelsMul.map(c=>c[1]));r.meter.value=peak?Math.max(-60,20*Math.log10(peak)):-60;}}});
+socket.on('connect',()=>{document.querySelector('#connection-light').style.backgroundColor='var(--success-color)'});
+socket.on('disconnect',()=>{document.querySelector('#connection-light').style.backgroundColor='var(--error-color)';document.querySelector('#status').textContent='Controller disconnected';});
 window.addEventListener('pagehide',()=>socket.disconnect());
 </script></body></html>

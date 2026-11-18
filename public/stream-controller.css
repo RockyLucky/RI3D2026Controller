@@ -1,0 +1,37 @@
+body {min-height:100vh;background-attachment:fixed}header.container{margin:16px}nav{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}button{min-height:48px;font-size:16px}main{margin:16px}.studio{display:grid;grid-template-columns:1fr 2fr;gap:16px}.studio .container{margin:0}#scenes{display:grid;gap:10px}#program,#staged{font-size:28px;overflow-wrap:anywhere}#program{border-left:5px solid var(--error-color);padding:12px}#staged{border-left:5px solid var(--primary-color);padding:12px}iframe{width:100%;height:calc(100vh - 180px);border:0;border-radius:16px;background:white}[hidden]{display:none!important}@media(max-width:750px){.studio{grid-template-columns:1fr}header .flex-apart{flex-wrap:wrap}}
+
+#program-preview {display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#111;border-radius:8px} #preview-status {font-size:13px}
+
+#scenes{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}#scenes button{min-height:100px;text-align:left;padding:20px;overflow-wrap:anywhere}
+
+#scene-preview{width:100%;aspect-ratio:16/9;object-fit:contain;background:#111;border-radius:8px}
+
+/* Compact production workspace */
+header.container{margin:8px 12px;padding:10px 14px;border-radius:12px}
+header h2{font-size:19px}header a, #connection{font-size:13px}
+nav{margin-top:8px;gap:6px}nav button{min-height:34px;padding:6px 12px;font-size:13px;border-radius:6px}
+main{margin:12px}.studio{grid-template-columns:190px minmax(0,1fr);gap:12px}
+.studio>.container{padding:14px}.studio>.container>p{font-size:12px}
+#scenes{grid-template-columns:1fr;gap:7px}#scenes button{min-height:48px;padding:10px 12px;font-size:14px}
+.monitors{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-content:start}
+.monitor{min-width:0}.monitor h3{font-size:16px}.monitor #program,.monitor #staged{font-size:20px;margin:10px 0;padding:8px}
+#scene-preview-status,#preview-status,#result{font-size:12px;overflow-wrap:anywhere}
+.take-controls{display:flex;gap:8px;margin-top:12px}.take-controls button{min-height:44px;font-size:14px}
+iframe{height:calc(100vh - 120px)}
+@media(max-width:900px){.studio{grid-template-columns:1fr}#scenes{grid-template-columns:repeat(auto-fit,minmax(110px,1fr))}.studio>.container>p{margin:6px 0}}
+@media(max-width:580px){.monitors{grid-template-columns:1fr}header .flex-apart{gap:6px}header h2{font-size:16px}}
+
+#scenes button.scene-live{outline:3px solid var(--error-color);outline-offset:2px}
+
+.source-definitions{margin:12px 0}.source-definitions summary{cursor:pointer;font-size:17px}#source-buttons{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}#source-buttons button{min-height:42px;font-size:14px}.source-definitions input{width:min(100%,600px)}.source-definitions label{display:grid;gap:6px}
+
+#source-choices{display:flex;gap:8px;flex-wrap:wrap;padding-top:12px;margin-top:12px;border-top:1px solid var(--gray-color)}#source-choices button{min-height:44px;font-size:14px}
+
+/* Dense tablet controls */
+header.container{margin:6px 8px;padding:7px 10px}header h2{font-size:16px}nav{margin-top:6px;gap:5px}nav button{font-size:12px;min-height:30px;padding:5px 10px}
+main{margin:8px}.studio{gap:8px;grid-template-columns:160px minmax(0,1fr)}.studio>.container{padding:10px}.monitors{gap:10px}
+.monitor-heading{display:flex;align-items:center;gap:10px;min-width:0;margin-bottom:8px}.monitor-heading h3{font-size:13px;white-space:nowrap}.monitor .monitor-heading #program,.monitor .monitor-heading #staged{font-size:15px;margin:0;padding:3px 7px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#scenes{gap:6px}#scenes button{min-height:38px;padding:6px 9px;font-size:12px}.studio>.container>h3{font-size:14px}.studio>.container>p{margin:5px 0 9px;font-size:11px}
+#scene-preview-status,#preview-status,#result{font-size:11px;margin:5px 0}.take-controls{margin-top:7px;gap:6px}.take-controls button{min-height:36px;padding:7px 12px;font-size:13px}
+.source-definitions{padding:10px;margin:8px 0}.source-definitions h3{font-size:14px}.source-definitions>p{font-size:11px;margin:5px 0}#source-buttons{gap:6px;margin-top:7px}#source-buttons button,#source-choices button{min-height:34px;padding:6px 10px;font-size:12px}#source-choices{gap:6px;padding-top:8px;margin-top:8px}#source-status{font-size:11px;margin:5px 0}
+@media(max-width:900px){.studio{grid-template-columns:1fr}#scenes{grid-template-columns:repeat(auto-fit,minmax(100px,1fr))}}

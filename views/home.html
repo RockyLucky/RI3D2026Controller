@@ -1,6 +1,6 @@
 <html>
     <head>
-        <title>RI3D@MTU 2026</title>
+        <title>RI3D@MTU {{EVENT_YEAR}}</title>
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 
         <link rel="stylesheet" href="main.css"/>
@@ -11,25 +11,15 @@
         <div class="center-module">
             <div>
                 <div class="flex-center">
-                    <h1 style="font-size: 40px;">RI3D @ MTU 2026</h1>
+                    <h1 style="font-size: 40px;">RI3D @ MTU {{EVENT_YEAR}}</h1>
                 </div>
                 <br/>
                 <br/>
                 <div class="flex-center" style="flex-wrap:wrap;width: 80vw">
-                    <div onclick="goToLink('/ri3d26/home')" class="large-home-button">
+                    <div onclick="goToLink('/ri3d26/control')" class="large-home-button">
                         <span class="material-symbols-outlined large-icon">home</span>
                         <br/>
-                        <h2>Home</h2>
-                    </div>
-                    <div onclick="goToLink('/ri3d26/scenes')" class="large-home-button">
-                        <span class="material-symbols-outlined large-icon">camera_video</span>
-                        <br/>
-                        <h2>Camera Manager</h2>
-                    </div>
-                    <div onclick="goToLink('/ri3d26/manager')" class="large-home-button">
-                        <span class="material-symbols-outlined large-icon">wall_art</span>
-                        <br/>
-                        <h2>Overlay Manager</h2>
+                        <h2>Stream Controller</h2>
                     </div>
                     <div onclick="goToLink('/ri3d26/documents')" class="large-home-button">
                         <span class="material-symbols-outlined large-icon">files</span>
@@ -51,7 +41,7 @@
             
             
         </div>
-    </body>
+    <a href="/management" class="bg-primary" style="position:fixed;right:20px;bottom:20px;z-index:10;padding:12px 18px;border-radius:8px;color:black;text-decoration:none;box-shadow:0 4px 8px rgba(0,0,0,.3)">Connection Settings</a></body>
     <script>
 
         const socket = io(window.location.host, {
@@ -84,4 +74,5 @@
     
     </script>
 </html>
+
 

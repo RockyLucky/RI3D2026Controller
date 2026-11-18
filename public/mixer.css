@@ -1,0 +1,8 @@
+.mixer-layout { position: relative; top: auto; left: auto; transform: none; margin: 100px auto 30px; max-width: 94vw; }
+.mixer-channel { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(100px, 2fr) 90px minmax(90px, 1fr); align-items: center; gap: 16px; margin: 14px 0; }
+.mixer-name { overflow-wrap: anywhere; }
+.mixer-channel input { width: 100%; accent-color: var(--primary-color); padding: 0; }
+.mixer-channel meter { width: 100%; height: 24px; }
+#connection-light { background: var(--error-color); }
+body { min-height: 100vh; background-attachment: fixed; }
+@media (max-width: 640px) { .mixer-channel { grid-template-columns: 1fr 90px; } .mixer-name { grid-column: 1 / -1; } .mixer-channel meter { grid-column: 1 / -1; } .mixer-layout .container { width: 94vw; margin: 0; } }

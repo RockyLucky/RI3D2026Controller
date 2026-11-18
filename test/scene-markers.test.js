@@ -1,0 +1,4 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {sceneInputs}=require('../scene-markers');
+test('arbitrary scene marker selects numbered source and keeps transform',()=>{const c={obs_state:{snapshot:{items:{Audience:[{sourceName:'RI3D Managed Web 3',sceneItemTransform:{positionX:50}}]}}},camera:{sourceSlots:[null,null,'cad'],configured:[{id:'cad',type:'web',url:'https://example.com'}]}};const [input]=sceneInputs('Audience',c);assert.equal(input.id,'cad');assert.equal(input.slot,3);assert.equal(input.markerTransform.positionX,50);});
+test('ordinary scenes remain unmanaged',()=>assert.equal(sceneInputs('Other',{obs_state:{},camera:{}}),null));
+test('unassigned markers reject',()=>assert.throws(()=>sceneInputs('Audience',{obs_state:{snapshot:{items:{Audience:[{sourceName:'RI3D Managed Web 1'}]}}},camera:{configured:[]}}),/Source 1/));

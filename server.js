@@ -1,6 +1,9 @@
+const { eventYear } = require('./config');
 const express = require('express');
 const fs = require('fs');
 const app = express();
+require('./local-management')(app);
+app.get('/ri3d26/control', (req,res)=>res.sendFile(__dirname+'/views/stream-controller.html'));
 const basePath = "/ri3d26";
 const cors = require('cors');
 // allow localhost:3001
@@ -54,7 +57,7 @@ app.get(basePath + '/preview', (req, res) => {
 });
 app.get(basePath + '/mixer', (req,res) => res.sendFile(__dirname + '/views/mixer.html'));
 app.get(basePath + '/home', (req, res) => {
-    res.sendFile(__dirname + '/views/home.html');
+    res.type('html').send(fs.readFileSync(__dirname + '/views/home.html','utf8').replaceAll('{{EVENT_YEAR}}', eventYear));
 });
 
 app.get(basePath + '/document-search', (req, res) => {
@@ -191,6 +194,68 @@ async function init(){
 
 io.on('connection', (socket) => {
     console.log('a page connected');
+    socket.on('program-preview', ack => {
+        if(typeof ack!=='function')return;
+        const state=globalConfig.obs_state;
+        if(!state.connected || !state.currentScene)return ack({error:'OBS disconnected'});
+        if(socket.previewPending || Date.now()-(socket.lastPreview||0)<900)return ack({error:'Preview busy'});
+        socket.previewPending=true;socket.lastPreview=Date.now();let done=false;
+        const timer=setTimeout(()=>{if(!done){done=true;socket.previewPending=false;ack({error:'Preview timed out'});}},4000);
+        obsManager.sendBatchRequests([{requestType:'GetSourceScreenshot',requestData:{sourceName:state.currentScene,imageFormat:'jpeg',imageWidth:640,imageCompressionQuality:60}}],response=>{
+            if(done)return;done=true;clearTimeout(timer);socket.previewPending=false;
+            const image=response?.[0]?.responseData?.imageData;
+            ack(typeof image==='string' && image.startsWith('data:image/')?{image,scene:state.currentScene}:{error:'OBS preview unavailable'});
+        });
+    });
+    socket.on('save-source-slots',async (slots,ack)=>{
+        if(typeof ack!=='function')return;
+        try {
+            if(!Array.isArray(slots)||slots.length!==6||slots.some(id=>id!==null&&(typeof id!=='string'||!globalConfig.camera.configured.some(c=>c.id===id))))throw Error('Choose existing Camera Manager inputs for all six sources.');
+            await writeConfig({...globalConfig.camera,sourceSlots:slots},'camera');globalConfig.camera.sourceSlots=slots;io.emit('dataUpdated','camera','sourceSlots',slots);
+            // Assignment changes remain configuration only; prepare the inactive bank before Take Live.
+            ack({ok:true});
+        }catch(error){ack({error:error.message});}
+    });
+    socket.on('scene-preview', (scene, ack) => {
+        if(typeof ack!=='function')return;
+        const state=globalConfig.obs_state;
+        if(!state.connected || !state.snapshot?.scenes?.scenes.some(s=>s.sceneName===scene))return ack({error:'OBS disconnected or scene missing'});
+        if(socket.scenePreviewPending || Date.now()-(socket.lastScenePreview||0)<900)return ack({error:'Preview busy'});
+        socket.scenePreviewPending=true;socket.lastScenePreview=Date.now();let done=false;
+        const finish=result=>{if(done)return;done=true;clearTimeout(timer);socket.scenePreviewPending=false;ack(result);};
+        const timer=setTimeout(()=>finish({error:'Preview timed out'}),4500);
+        let previewScene=scene;
+        const screenshot=()=>{if(done)return;obsManager.sendBatchRequests([{requestType:'GetSourceScreenshot',requestData:{sourceName:previewScene,imageFormat:'jpeg',imageWidth:640,imageCompressionQuality:60}}],response=>{
+            const image=response?.[0]?.responseData?.imageData;finish(typeof image==='string'&&image.startsWith('data:image/')?{image,scene}:{error:'OBS preview unavailable'});
+        });};
+        let managedInputs;try{managedInputs=require('./scene-markers').sceneInputs(scene,globalConfig);}catch(error){return finish({error:error.message});}
+        if(managedInputs){
+            const inputs=managedInputs;const count=inputs.length;
+            if(inputs.length!==count||inputs.some(c=>!c||!['media','web','file'].includes(c.type)||!c.url))return finish({error:'Assign valid Sources before previewing this scene.'});
+            obsManager.sendBatchRequests([{requestType:'RI3DPrepareScene',requestData:{sceneName:scene,inputs,preview:true}}],response=>{if(done)return;if(response?.error)return finish({error:response.error});previewScene=response?.[0]?.responseData?.sceneName||scene;setTimeout(screenshot,700);});
+        }else screenshot();
+    });
+    socket.on('run-scene',(scene,ack)=>{
+        if(typeof ack!=='function')return;
+        const state=globalConfig.obs_state;
+        if(!state.connected || typeof scene!=='string' || !state.snapshot?.scenes?.scenes.some(s=>s.sceneName===scene))return ack({error:'OBS is unavailable or scene no longer exists.'});
+        let managedInputs;try{managedInputs=require('./scene-markers').sceneInputs(scene,globalConfig);}catch(error){return ack({error:error.message});}
+        if(managedInputs){
+            const inputs=managedInputs;const count=inputs.length;
+            if(inputs.length!==count || inputs.some(c=>!c||!['media','web','file'].includes(c.type)||!c.url))return ack({error:'Assign valid numbered Sources in Camera Manager before taking this scene live.'});
+            let finished=false;const timeout=setTimeout(()=>{if(!finished){finished=true;ack({error:'Scene preparation timed out; check OBS before retrying.'});}},6500);
+            obsManager.sendBatchRequests([{requestType:'RI3DPrepareScene',requestData:{sceneName:scene,inputs}}],response=>{
+                if(finished)return;
+                if(response?.error){finished=true;clearTimeout(timeout);return ack({error:response.error});}
+                obsManager.sendBatchRequests([{requestType:'SetCurrentProgramScene',requestData:{sceneName:response?.[0]?.responseData?.sceneName||scene}}],result=>{if(finished)return;finished=true;clearTimeout(timeout);ack(result?.[0]?.requestStatus?.result?{ok:true}:{error:result?.error||'OBS rejected the scene switch.'});});
+            });return;
+        }
+        let done=false;const timer=setTimeout(()=>{if(!done){done=true;ack({error:'OBS did not confirm. Check the live scene.'});}},6500);
+        obsManager.sendBatchRequests([{requestType:'SetCurrentProgramScene',requestData:{sceneName:scene}}],response=>{
+            if(done)return;done=true;clearTimeout(timer);
+            ack(response?.error?{error:response.error}:Array.isArray(response)&&response[0]?.requestStatus?.result?{ok:true}:{error:'OBS rejected the scene request.'});
+        });
+    });
     socket.on('obs-responses', (id,response) => obsManager.resolveRequest(id,response));
     socket.on('obs-meters', data => io.emit('obs-meters',data));
     socket.on('mixer-command', (name, muted, db) => {
@@ -254,10 +319,7 @@ io.on('connection', (socket) => {
 //     }
 // }, 5000);
 
-init();
+init().then(() => http.listen(Number(process.env.PORT) || 3000, process.env.HOST || '127.0.0.1', () => { console.log('Local controller ready'); })).catch(console.error);
 
-http.listen(3000, async () => {
-    await init();
-    console.log('listening on *:3000');
-});
+
 
