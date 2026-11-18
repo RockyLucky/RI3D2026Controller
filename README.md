@@ -9,3 +9,5 @@ Mixer controls volume in dB and mute. Active input meters use OBS peak multiplie
 Not implemented: dynamic VDO room discovery, queue/grace management, remembered camera identity, viewer quality profiles, preview subscription lifecycle, automatic assignment release/recovery, authentication, and full external-change editing in the legacy camera forms. These are planned work, not claimed working features. The OBS snapshot exposes transforms/settings/media/output state, but the legacy forms do not yet render all of it.
 
 Validation: syntax checks and local startup smoke test only. No live OBS, Stream Deck, VDO room, phones or campus network was available. Run acceptance tests for external scene/source/audio changes, failed commands, restart/reconnect and simultaneous controls before production.
+
+See [CHANGE.md](CHANGE.md) for feature descriptions, iteration history, validation, and remaining work. Contributors must update it with each iteration; see [AGENTS.md](AGENTS.md).
