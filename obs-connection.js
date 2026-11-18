@@ -1,166 +1,62 @@
 const { io } = require('socket.io-client');
-const OBSWebSocket = require('obs-websocket-js').OBSWebSocket;
-
-// const connectToHost = "https://ccr.students.mtu.edu";
-const connectToHost = "http://ccr.students.mtu.edu";
-const connectToPath = "/ri3d26/socket.io/";
-
-const obsInstance = new OBSWebSocket();
-const obsState = {
-    connected: false,
-    scenesToTarget: [
-        "Passive",
-        "Present",
-        "BeRightBack",
-        "TwoCamera",
-        "StartingSoon"
-    ],
-    sceneIndexMapping: {},
-    currentScene: null,
-    cache: {
-        // in the format of sceneName~sourceName: {props}
-        // for item settings so we don't bother resetting over and over
-    }
-};
-
-async function connectOBS(){
-    try {
-        await obsInstance.connect("ws://127.0.0.1:4455");
-        obsState.connected = true;
-        console.log("Connected to OBS WebSocket server");
-
-        defaultOBSdataPieces();
-    } catch (error) {
-        console.error("Failed to connect to OBS WebSocket server:", error);
-    }
-}
-
-async function refreshCacheFromOBS(){
-    // take everything from the current scene and store it in the cache
-    // just go into the local mapping for the current scene
-    let sceneName = obsState.currentScene;
-    let sceneMapping = obsState.sceneIndexMapping[sceneName];
-    if(!sceneMapping) return;
-
-    let sceneObjects = Object.keys(sceneMapping);
-    // now we want to get the input settings for each one
-    for(const sourceName of sceneObjects){
-        const sourceSettings = await obsInstance.call('GetInputSettings', {
-            inputName: sourceName
-        });
-        obsState.cache[`${sceneName}~${sourceName}`] = sourceSettings;
-    }
-
-    console.log("OBS cache refreshed for scene:", sceneName);
-    socket.emit("obs-data", "obs_state", "cache", obsState.cache);
-    
-}
-
-async function defaultOBSdataPieces(){
-    // first, get all of the scenes...
-    // already manually done
-
-    // next, do the scene_index_mapping population
-    for(const sceneName of obsState.scenesToTarget){
-        // we both want to send it back to the server, and also store it locally
-        let localMapping = {};
-        // get full scene item list
-        const response = await obsInstance.call('GetSceneItemList', {
-            sceneName: sceneName
-        });
-
-        response.sceneItems.forEach(item => {
-            if(item.sourceName.startsWith("RI3D_")){
-                localMapping[item.sourceName] = item.sceneItemId;
-            }
-        });
-
-        obsState.sceneIndexMapping[sceneName] = localMapping;
-        // send to server using obs-data
-
-        socket.emit("obs-data", "scene_index_mapping", sceneName, localMapping);
-    }
-
-    // then the event listener for the scene changed
-    obsInstance.on("CurrentProgramSceneChanged", async (data) => {
-        console.log("OBS Current Scene Changed:", data);
-        obsState.currentScene = data.sceneName;
-        socket.emit("obs-data", "obs_state", "currentScene", data.sceneName);
-        refreshCacheFromOBS();
-    })
-
-    // also just get the current scene once connected
-    let currentSceneResponse = await obsInstance.call('GetCurrentProgramScene');
-    obsState.currentScene = currentSceneResponse.sceneName;
-    socket.emit("obs-data", "obs_state", "currentScene", obsState.currentScene);
-
-    refreshCacheFromOBS();
-}
-
-function stripRequestsThatMatchCache(requests){
-    let sceneName = obsState.currentScene;
-    let finalRequests = [];
-    for(const req of requests){
-        let includeInRequest = true;
-        if(req.requestType == "SetInputSettings") {
-            let inputName = req.requestData.inputName;
-            let cacheKey = `${sceneName}~${inputName}`;
-            let cachedSettings = obsState.cache[cacheKey];
-            if(cachedSettings){
-                let settingsToSet = req.requestData.inputSettings;
-                // compare each key in settingsToSet to cachedSettings.inputSettings
-                let allMatch = true;
-                for(const key of Object.keys(settingsToSet)){
-                    if(cachedSettings.inputSettings[key] !== settingsToSet[key]){
-                        allMatch = false;
-                        cachedSettings.inputSettings[key] = settingsToSet[key]; // update cache
-                    }
-                }
-                if(allMatch){
-                    includeInRequest = false;
-                }
-            }
+const { OBSWebSocket } = require('obs-websocket-js');
+const obs = new OBSWebSocket();
+const socket = io(process.env.CONTROLLER_URL || 'http://127.0.0.1:3000', {path: '/ri3d26/socket.io'});
+let connected = false, busy = false, dirty = false;
+const emit = (key, value) => socket.emit('obs-data', 'obs_state', key, value);
+async function refresh() {
+  dirty = true;
+  if (busy || !connected) return;
+  busy = true;
+  try {
+    while (dirty && connected) {
+      dirty = false;
+      const scenes = await obs.call('GetSceneList');
+      const inputs = await obs.call('GetInputList');
+      const snapshot = {scenes, inputs: {}, items: {}, outputs: {}};
+      const cache = {};
+      for (const input of inputs.inputs) {
+        const name = input.inputName;
+        snapshot.inputs[name] = {...input};
+        for (const type of ['GetInputSettings','GetInputVolume','GetInputMute','GetMediaInputStatus']) {
+          try { Object.assign(snapshot.inputs[name], await obs.call(type, {inputName:name})); } catch (_) { /* Not every input supports audio/media. */ }
         }
-        if(includeInRequest){
-            finalRequests.push(req);
+      }
+      for (const scene of scenes.scenes) {
+        const {sceneItems} = await obs.call('GetSceneItemList', {sceneName:scene.sceneName});
+        snapshot.items[scene.sceneName] = sceneItems;
+        const mapping = {};
+        for (const item of sceneItems) {
+          if (item.sourceName.startsWith('RI3D_')) mapping[item.sourceName] = item.sceneItemId;
+          cache[`${scene.sceneName}~${item.sourceName}`] = snapshot.inputs[item.sourceName];
         }
+        socket.emit('obs-data','scene_index_mapping',scene.sceneName,mapping);
+      }
+      for (const type of ['GetStreamStatus','GetRecordStatus','GetVirtualCamStatus','GetReplayBufferStatus']) {
+        try { snapshot.outputs[type] = await obs.call(type); } catch (_) {}
+      }
+      emit('snapshot',snapshot);
+      emit('cache',cache);
+      emit('currentScene',scenes.currentProgramSceneName);
     }
-
-    return finalRequests;
+  } catch (error) { emit('syncError',error.message); }
+  finally { busy = false; }
 }
-
-const socket = io(connectToHost, {
-    path: connectToPath
+for (const event of ['CurrentProgramSceneChanged','SceneCreated','SceneRemoved','SceneNameChanged','SceneItemCreated','SceneItemRemoved','SceneItemEnableStateChanged','SceneItemTransformChanged','InputCreated','InputRemoved','InputNameChanged','InputSettingsChanged','InputVolumeChanged','InputMuteStateChanged','MediaInputPlaybackStarted','MediaInputPlaybackEnded','MediaInputActionTriggered','StreamStateChanged','RecordStateChanged','VirtualcamStateChanged','ReplayBufferStateChanged']) obs.on(event, refresh);
+obs.on('InputVolumeMeters', data => socket.emit('obs-meters',data));
+obs.on('ConnectionClosed', () => { connected=false; emit('connected',false); });
+let connecting=false;
+async function connect() {
+  if (connecting || connected) return;
+  connecting=true;
+  try { await obs.connect(process.env.OBS_URL || 'ws://127.0.0.1:4455',process.env.OBS_PASSWORD, {eventSubscriptions: 2047 | (1<<16) | (1<<19)}); connected=true; emit('connected',true); await refresh(); }
+  catch (_) { emit('connected',false); }
+  finally { connecting=false; }
+}
+socket.on('connect', () => { emit('connected',connected); connected ? refresh() : connect(); });
+socket.on('obs-requests', async (id, requests) => {
+  if (!connected) return socket.emit('obs-responses',id,{error:'OBS disconnected'});
+  try { const response=await obs.callBatch(requests,{executionType:0}); socket.emit('obs-responses',id,response); await refresh(); }
+  catch(error) { socket.emit('obs-responses',id,{error:error.message}); }
 });
-
-socket.on('connect', () => {
-    console.log('Connected to server via socket.io');
-    connectOBS();
-});
-
-socket.on('error', (error) => {
-    console.error('Socket.io error:', error);
-});
-
-socket.on("obs-requests", async (reqId, data) => {
-    // reqId is just a UUID to keep track for responses
-    console.log("Received OBS requests:", data);
-    if(!obsState.connected) return;
-    let requests = stripRequestsThatMatchCache(data);
-    console.log("Filtered OBS requests:", requests);
-    try {
-        const response = await obsInstance.callBatch(requests);
-        console.log("OBS requests response:", response);
-        socket.emit("obs-responses", reqId, response);
-    } catch (error) {
-        console.error("Error processing OBS requests:", error);
-        socket.emit("obs-responses", reqId, {error: error.message});
-    }
-});
-
-socket.on('disconnect', (reason) => {
-    console.log('Disconnected from server:', reason);
-});
-
-
-console.log(`Socket.io client connecting to ${connectToHost} with path ${connectToPath}`);
+setInterval(connect,3000);

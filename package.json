@@ -7,7 +7,9 @@
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
-    "start": "node ."
+    "start": "node .",
+    "bridge": "node obs-connection.js",
+    "test": "node --test"
   },
   "dependencies": {
     "express": "^5.2.1",

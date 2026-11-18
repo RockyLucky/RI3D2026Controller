@@ -1,0 +1,23 @@
+<!doctype html><html><head><title>Audio mixer</title><script src="/ri3d26/socket.io/socket.io.js"></script></head><body><a href="home">Home</a><h1>Audio mixer</h1><p id="status">Waiting for OBS</p><main></main><script>
+const socket=io({path:'/ri3d26/socket.io'}), rows=new Map();
+function render(state){
+ document.querySelector('#status').textContent='OBS audio inputs';
+ const names=new Set();
+ for(const [name,input] of Object.entries(state.inputs||{})){
+  if(typeof input.inputMuted!=='boolean')continue;
+  names.add(name);
+  if(!rows.has(name)){
+   const row=document.createElement('p'), label=document.createElement('span'), gain=document.createElement('input'), mute=document.createElement('button'), meter=document.createElement('meter');
+   label.textContent=name+' ';gain.type='range';gain.min=-100;gain.max=26;gain.step=0.5;gain.setAttribute('aria-label',name+' gain dB');meter.min=-60;meter.max=0;meter.value=-60;
+   gain.onchange=()=>socket.emit('mixer-command',name,null,Number(gain.value));mute.onclick=()=>socket.emit('mixer-command',name,mute.dataset.muted!=='true');
+   row.append(label,gain,mute,meter);document.querySelector('main').append(row);rows.set(name,{row,gain,mute,meter});
+  }
+  const r=rows.get(name);if(document.activeElement!==r.gain)r.gain.value=input.inputVolumeDb ?? -100;r.mute.dataset.muted=String(input.inputMuted);r.mute.textContent=input.inputMuted?'Unmute':'Mute';
+ }
+ for(const [name,r] of rows)if(!names.has(name)){r.row.remove();rows.delete(name);}
+}
+socket.on('entireConfig',c=>{if(c.obs_state.snapshot)render(c.obs_state.snapshot)});
+socket.on('dataUpdated',(g,k,v)=>{if(g==='obs_state'&&k==='snapshot')render(v);if(g==='obs_state'&&k==='connected'&&!v)document.querySelector('#status').textContent='OBS disconnected';});
+socket.on('obs-meters',data=>{for(const r of rows.values())r.meter.value=-60;for(const i of data.inputs||[]){const r=rows.get(i.inputName);if(r){const peak=Math.max(0,...i.inputLevelsMul.map(c=>c[1]));r.meter.value=peak?Math.max(-60,20*Math.log10(peak)):-60;}}});
+window.addEventListener('pagehide',()=>socket.disconnect());
+</script></body></html>

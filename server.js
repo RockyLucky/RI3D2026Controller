@@ -52,6 +52,7 @@ app.get(basePath + '/schedule', (req, res) => {
 app.get(basePath + '/preview', (req, res) => {
     res.sendFile(__dirname + '/views/preview.html');
 });
+app.get(basePath + '/mixer', (req,res) => res.sendFile(__dirname + '/views/mixer.html'));
 app.get(basePath + '/home', (req, res) => {
     res.sendFile(__dirname + '/views/home.html');
 });
@@ -160,6 +161,7 @@ async function readConfig(group) {
     // TRY to read the file, if it doesn't exist return the default structure
     if(!fs.existsSync(`data/${group}.json`)){
         // then return default structure
+        if (!fs.existsSync(`data/default/${group}.json`)) return globalConfig[group];
         const defaultStructure = await fs.promises.readFile(`data/default/${group}.json`, 'utf8');
         return JSON.parse(defaultStructure);
     }
@@ -173,6 +175,7 @@ const DO_NOT_WRITE= ["obs_state", "scene_index_mapping", "constants"];
 async function writeConfig(config, group) {
     if(DO_NOT_WRITE.includes(group)) return;
 
+    await fs.promises.mkdir('data', {recursive:true});
     const data = JSON.stringify(config, null, 2);
     await fs.promises.writeFile(`data/${group}.json`, data, 'utf8');
 }
@@ -188,6 +191,13 @@ async function init(){
 
 io.on('connection', (socket) => {
     console.log('a page connected');
+    socket.on('obs-responses', (id,response) => obsManager.resolveRequest(id,response));
+    socket.on('obs-meters', data => io.emit('obs-meters',data));
+    socket.on('mixer-command', (name, muted, db) => {
+      if(typeof name !== 'string') return;
+      if(typeof muted === 'boolean') obsManager.sendBatchRequests([{requestType:'SetInputMute',requestData:{inputName:name,inputMuted:muted}}]);
+      else if(Number.isFinite(db) && db >= -100 && db <= 26) obsManager.sendBatchRequests([{requestType:'SetInputVolume',requestData:{inputName:name,inputVolumeDb:db}}]);
+    });
 
     socket.emit("entireConfig", globalConfig);
 
