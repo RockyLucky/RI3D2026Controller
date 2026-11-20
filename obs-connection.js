@@ -2,19 +2,15 @@ const { io } = require('socket.io-client');
 const OBSWebSocket = require('obs-websocket-js').OBSWebSocket;
 
 // const connectToHost = "https://ccr.students.mtu.edu";
-const connectToHost = "http://ccr.students.mtu.edu";
+const connectToHost = process.env.OBS_SOCKET_SERVER_URL || "http://ccr.students.mtu.edu";
 const connectToPath = "/ri3d26/socket.io/";
+
+const obsWebSocketUrl = process.env.OBS_WEBSOCKET_URL || "ws://127.0.0.1:4455";
+const obsWebSocketPassword = process.env.OBS_WEBSOCKET_PASSWORD || "";
 
 const obsInstance = new OBSWebSocket();
 const obsState = {
     connected: false,
-    scenesToTarget: [
-        "Passive",
-        "Present",
-        "BeRightBack",
-        "TwoCamera",
-        "StartingSoon"
-    ],
     sceneIndexMapping: {},
     currentScene: null,
     cache: {
@@ -25,12 +21,13 @@ const obsState = {
 
 async function connectOBS(){
     try {
-        await obsInstance.connect("ws://127.0.0.1:4455");
+        await obsInstance.connect(obsWebSocketUrl, obsWebSocketPassword);
         obsState.connected = true;
-        console.log("Connected to OBS WebSocket server");
+        console.log(`Connected to OBS WebSocket server at ${obsWebSocketUrl}`);
 
-        defaultOBSdataPieces();
+        await defaultOBSdataPieces();
     } catch (error) {
+        obsState.connected = false;
         console.error("Failed to connect to OBS WebSocket server:", error);
     }
 }
@@ -57,11 +54,11 @@ async function refreshCacheFromOBS(){
 }
 
 async function defaultOBSdataPieces(){
-    // first, get all of the scenes...
-    // already manually done
+    const sceneListResponse = await obsInstance.call('GetSceneList');
+    const sceneNames = sceneListResponse.scenes.map(scene => scene.sceneName);
 
-    // next, do the scene_index_mapping population
-    for(const sceneName of obsState.scenesToTarget){
+    // Populate mappings for every scene reported by OBS.
+    for(const sceneName of sceneNames){
         // we both want to send it back to the server, and also store it locally
         let localMapping = {};
         // get full scene item list
@@ -96,6 +93,11 @@ async function defaultOBSdataPieces(){
 
     refreshCacheFromOBS();
 }
+
+obsInstance.on('ConnectionClosed', () => {
+    obsState.connected = false;
+    console.log('Disconnected from OBS WebSocket server');
+});
 
 function stripRequestsThatMatchCache(requests){
     let sceneName = obsState.currentScene;

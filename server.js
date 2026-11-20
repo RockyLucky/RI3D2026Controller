@@ -111,13 +111,6 @@ let globalConfig = {
         additionalScheduleNotes: ""
     },
     obs_state: {
-        scenesToTarget: [ // set MANUALLY - mimiced in obs-connection.js
-            "Passive",
-            "Present",
-            "BeRightBack",
-            "TwoCamera",
-            "StartingSoon"
-        ],
         currentScene: null,
         cache: {},
         sourceCameraNames: { // keep track of which sources are mapped to which cameras
